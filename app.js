@@ -15,6 +15,7 @@
   var chartTooltip = document.getElementById('chartTooltip');
   var chartCaption = document.getElementById('chartCaption');
   var chartXAxisSelect = document.getElementById('chartXAxis');
+  var cellLabelModeSelect = document.getElementById('cellLabelMode');
   // Optional labels for rows/cols
   var rowLabelsInput = document.getElementById('rowLabelsInput');
   var colLabelsInput = document.getElementById('colLabelsInput');
@@ -34,6 +35,8 @@
   var cramerVEl = document.getElementById('cramerV');
   var decisionEl = document.getElementById('decision');
   var interpEl = document.getElementById('interpretation');
+  var mgrEl = document.getElementById('managerInterpretation');
+  var apaEl = document.getElementById('apaReport');
 
   var R = clamp(parseInt(getValue(rowsInput), 10) || 2, 2, 10);
   var C = clamp(parseInt(getValue(colsInput), 10) || 2, 2, 10);
@@ -69,8 +72,16 @@
     return node;
   }
 
+  function syncNamesFromWindow() {
+    if (typeof window !== 'undefined') {
+      if (typeof window.rowVarName === 'string' && window.rowVarName.trim()) rowVarName = window.rowVarName.trim();
+      if (typeof window.colVarName === 'string' && window.colVarName.trim()) colVarName = window.colVarName.trim();
+    }
+  }
+
   function buildObservedTable(rows, cols) {
     if (!tableContainer) return;
+    syncNamesFromWindow();
     var table = el('table', { class: 'grid-table' });
     var thead = el('thead');
     // Header row 1: variable names (view-only)
@@ -109,6 +120,7 @@
         on(inp, 'change', recompute);
         on(inp, 'keyup', recompute);
         td.appendChild(inp);
+        td.appendChild(el('span', { class: 'cell-label', text: '' }));
         tr.appendChild(td);
       }
       var totalCell = el('td', { class: 'total', text: '0' });
@@ -173,6 +185,10 @@
     // Chart with current labels
     ensureLabelArrays();
     renderChart(obs, rowLabels.slice(), colLabels.slice());
+    // Narrative outputs
+    updateNarratives(grand, res, useYates);
+    // Cell labels
+    updateCellLabels(obs, E, rowTotals, colTotals, grand);
   }
 
   function computeTotals(obs) {
@@ -197,6 +213,31 @@
       for (var j = 0; j < cN; j++) E[i][j] = grand > 0 ? (rowTotals[i] * colTotals[j]) / grand : 0;
     }
     return E;
+  }
+
+  function updateCellLabels(obs, E, rowTotals, colTotals, grand) {
+    if (!tableContainer) return;
+    var mode = cellLabelModeSelect ? cellLabelModeSelect.value : 'none';
+    var table = tableContainer.querySelector('table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    for (var i = 0; i < obs.length && i < rows.length; i++) {
+      var tds = rows[i].querySelectorAll('td');
+      for (var j = 0; j < obs[i].length && j < tds.length - 1; j++) {
+        var td = tds[j];
+        var span = td.querySelector('span.cell-label');
+        if (!span) continue;
+        if (mode === 'none') { span.style.display = 'none'; span.textContent = ''; continue; }
+        span.style.display = 'block';
+        var txt = '';
+        if (mode === 'observed') { txt = fmt(obs[i][j], 0); }
+        else if (mode === 'expected') { txt = fixed(E[i][j], 2); }
+        else if (mode === 'row_pct') { txt = (rowTotals[i] > 0) ? ( (obs[i][j] / rowTotals[i] * 100).toFixed(1) + '%' ) : '-'; }
+        else if (mode === 'col_pct') { txt = (colTotals[j] > 0) ? ( (obs[i][j] / colTotals[j] * 100).toFixed(1) + '%' ) : '-'; }
+        else if (mode === 'table_pct') { txt = (grand > 0) ? ( (obs[i][j] / grand * 100).toFixed(1) + '%' ) : '-'; }
+        span.textContent = txt;
+      }
+    }
   }
 
   function renderExpected(E) {
@@ -312,6 +353,65 @@
     if (interpEl) interpEl.textContent = buildInterpretation(reject, res.p, res.df);
   }
 
+  function updateNarratives(N, res, usedYates) {
+    if (!res || !isFinite(N)) {
+      if (mgrEl) mgrEl.textContent = '';
+      if (apaEl) apaEl.textContent = '';
+      return;
+    }
+    // Pick up current variable names from headers if edited inline
+    var rowVarTh = document.getElementById('rowVarNameCell');
+    var colVarTh = document.getElementById('colVarNameCell');
+    var rVar = rowVarTh && rowVarTh.textContent ? rowVarTh.textContent.trim() : rowVarName;
+    var cVar = colVarTh && colVarTh.textContent ? colVarTh.textContent.trim() : colVarName;
+
+    var alpha = alphaSelect ? parseFloat(alphaSelect.value) : 0.05;
+    if (!isFinite(alpha)) alpha = 0.05;
+    var reject = isFinite(res.p) && res.p < alpha;
+    var Vdesc = describeEffect(res.V);
+
+    if (mgrEl) {
+      var base = 'We tested whether ' + rVar + ' and ' + cVar + ' are associated using a chi-square test of independence.';
+      var sig = reject
+        ? ' The test is statistically significant at alpha = ' + alpha + ' (p = ' + prettyP(res.p) + '), indicating that the distribution of ' + cVar + ' differs across levels of ' + rVar + '.'
+        : ' The test is not statistically significant at alpha = ' + alpha + ' (p = ' + prettyP(res.p) + '), so we do not have sufficient evidence that the distribution of ' + cVar + ' differs across levels of ' + rVar + '.';
+      var es = '';
+      if (isFinite(res.V)) {
+        var assocWord = Vdesc ? (' a ' + Vdesc + ' association ') : ' an association ';
+        es = ' Effect size (Cramer\'s V) is ' + fixed(res.V, 3) + (Vdesc ? ' (' + Vdesc + ')' : '') + ', indicating' + assocWord + 'between ' + rVar + ' and ' + cVar + '.';
+      }
+      var note = (usedYates && res.df === 1) ? ' Yates\' continuity correction was applied (2x2 table).' : '';
+      mgrEl.textContent = base + sig + es + note;
+    }
+
+    if (apaEl) {
+      apaEl.textContent = buildApa(rVar, cVar, N, res, usedYates);
+    }
+  }
+
+  function prettyP(p) {
+    if (!isFinite(p)) return 'NA';
+    if (p < 0.001) return '< .001';
+    var v = Number(p).toFixed(3);
+    return v;
+  }
+
+  function describeEffect(V) {
+    if (!isFinite(V)) return '';
+    // Cohen-style rough guidelines for Cramer's V
+    if (V >= 0.5) return 'large';
+    if (V >= 0.3) return 'medium';
+    if (V >= 0.1) return 'small';
+    return 'very small';
+  }
+
+  function buildApa(rVar, cVar, N, res, usedYates) {
+    var stat = 'X^2(' + res.df + ', N = ' + fmt(N, 0) + ') = ' + fixed(res.chi2, 2) + ', p ' + (res.p < 0.001 ? '< .001' : '= ' + prettyP(res.p));
+    var corr = (usedYates && res.df === 1) ? ' with Yates\' continuity correction' : '';
+    var eff = isFinite(res.V) ? (', Cramer\'s V = ' + fixed(res.V, 3)) : '';
+    return 'Association between ' + rVar + ' and ' + cVar + ': ' + stat + corr + eff + '.';
+  }
+
   function fmt(x, digits) {
     digits = digits || 4;
     if (!isFinite(x)) return '-';
@@ -335,8 +435,19 @@
   }
 
   function ensureLabelArrays() {
-    if (!rowLabels.length) rowLabels = parseLabels(getValue(rowLabelsInput), R, 'Row ');
-    if (!colLabels.length) colLabels = parseLabels(getValue(colLabelsInput), C, 'Col ');
+    syncNamesFromWindow();
+    var winRows = (typeof window !== 'undefined' && Array.isArray(window.rowLabels) && window.rowLabels.length) ? window.rowLabels : null;
+    var winCols = (typeof window !== 'undefined' && Array.isArray(window.colLabels) && window.colLabels.length) ? window.colLabels : null;
+    if (winRows) {
+      rowLabels = winRows.slice(0, R);
+    } else if (!rowLabels.length && rowLabelsInput) {
+      rowLabels = parseLabels(getValue(rowLabelsInput), R, 'Row ');
+    }
+    if (winCols) {
+      colLabels = winCols.slice(0, C);
+    } else if (!colLabels.length && colLabelsInput) {
+      colLabels = parseLabels(getValue(colLabelsInput), C, 'Col ');
+    }
     rowLabels = rowLabels.slice(0, R); while (rowLabels.length < R) rowLabels.push('Row ' + (rowLabels.length + 1));
     colLabels = colLabels.slice(0, C); while (colLabels.length < C) colLabels.push('Col ' + (colLabels.length + 1));
   }
@@ -406,6 +517,12 @@
           rect.addEventListener('mouseleave', hideTooltip);
         })(barLabels[b], stackLabels[s], segs[s], (total>0? ( (segs[s]/total*100).toFixed(1)+'%' ): '-'));
         g.appendChild(rect);
+        // Percentage label inside the segment (if tall enough)
+        if (h >= 16) {
+          var percentLabel = elNS('text', { x: x + barWidth/2, y: y + h/2 + 4, 'text-anchor': 'middle', fill: '#111827', 'font-size': '12' });
+          percentLabel.textContent = total > 0 ? (prop * 100).toFixed(1) + '%' : '-';
+          g.appendChild(percentLabel);
+        }
         yOffset -= h;
       }
       var lx = b * (barWidth + gap) + barWidth/2;
@@ -456,7 +573,10 @@
     var table = tableContainer ? tableContainer.querySelector('table') : null;
     if (!table) return;
     var inputs = table.querySelectorAll('tbody input');
-    inputs.forEach(function (inp, idx) { inp.value = String((idx % 5) + 1); });
+    inputs.forEach(function (inp) {
+      var v = Math.floor(Math.random() * (25 - 8 + 1)) + 8; // 8..25 inclusive
+      inp.value = String(v);
+    });
     recompute();
   }
 
@@ -464,8 +584,7 @@
     R = clamp(parseInt(getValue(rowsInput), 10) || 2, 2, 10);
     C = clamp(parseInt(getValue(colsInput), 10) || 2, 2, 10);
     setValue(rowsInput, String(R)); setValue(colsInput, String(C));
-    rowLabels = parseLabels(getValue(rowLabelsInput), R, 'Row ');
-    colLabels = parseLabels(getValue(colLabelsInput), C, 'Col ');
+    ensureLabelArrays();
     buildObservedTable(R, C);
     recompute();
   }
@@ -479,6 +598,7 @@
   on(yatesInput, 'change', recompute);
   on(alphaSelect, 'change', recompute);
   on(chartXAxisSelect, 'change', recompute);
+  on(cellLabelModeSelect, 'change', recompute);
   window.addEventListener('resize', function(){ var obs = getObserved(); if (obs) { renderChart(obs, rowLabels.slice(), colLabels.slice()); } });
   on(toggleEditBtn, 'click', openEditPanel);
   on(applyEditBtn, 'click', applyEditNames);
