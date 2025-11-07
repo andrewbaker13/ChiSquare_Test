@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chi-Square Test of Independence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="intro">
+        <h1>Chi-Square Test of Independence</h1>
+        <p class="plain-language">Explore whether two categorical variables are associated using a contingency table. Enter the observed counts below; we compute expected counts, χ², df, p-value, and an interpretation.</p>
+        <div class="equation">Test statistic: χ² = Σ<sub>i,j</sub> (O<sub>ij</sub> − E<sub>ij</sub>)² / E<sub>ij</sub></div>
+        <div class="equation">Expected count E<sub>ij</sub> = (Row<sub>i</sub> total × Col<sub>j</sub> total) / Grand total</div>
+        <p class="plain-language">Use the chi-square test of independence to check if the distribution of one categorical variable differs across the levels of another. In marketing, you might test whether purchase intent differs by ad version, or whether click-through rates vary across audience segments.</p>
+      </header>
+
+      <section class="controls-container">
+        <div class="control-column">
+          <h2>Design your table</h2>
+          <div class="control-group">
+            <label for="rows">Rows</label>
+            <input id="rows" type="number" min="2" max="10" value="2" />
+          </div>
+          <div class="control-group">
+            <label for="cols">Columns</label>
+            <input id="cols" type="number" min="2" max="10" value="2" />
+          </div>
+          
+          <div class="control-group">
+            <label for="cellLabelMode">Cell labels</label>
+            <select id="cellLabelMode">
+              <option value="none">None</option>
+              <option value="observed">Observed</option>
+              <option value="expected">Expected</option>
+              <option value="row_pct">Row %</option>
+              <option value="col_pct">Column %</option>
+              <option value="table_pct">Table %</option>
+            </select>
+            <div class="plain-language">Shows a small label under each input.</div>
+          </div>
+          <div class="control-group">
+            <label>Significance level (α)</label>
+            <div id="alphaButtons" class="alpha-buttons">
+              <button type="button" data-alpha="0.10">0.10</button>
+              <button type="button" data-alpha="0.05" class="active">0.05</button>
+              <button type="button" data-alpha="0.01">0.01</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>
+              <input id="yates" type="checkbox" />
+              Yates continuity correction (2×2 only)
+            </label>
+            <div class="plain-language">Use for small-sample 2×2 tables to reduce bias.</div>
+          </div>
+          <div class="control-group">
+            <label for="chartXAxis">Chart X-axis variable</label>
+            <select id="chartXAxis">
+              <option value="rows">Rows on X (stack by columns)</option>
+              <option value="columns">Columns on X (stack by rows)</option>
+            </select>
+            <div class="plain-language">Bars are 100% stacked proportions.</div>
+          </div>
+          <div class="control-group">
+            <button id="buildTable">Build Table</button>
+            <button id="clearTable" class="secondary">Clear</button>
+            <button id="sampleData" class="secondary">Sample</button>
+          </div>
+        </div>
+
+        <div class="control-column">
+          <h2>Observed Counts</h2>
+          <p class="editable-hint">Tip: Click the headers to rename categories and the variable names ("Rows" and "Columns").</p>
+          <div id="tableContainer"></div>
+          <p id="assumptionNote" class="plain-language"></p>
+        </div>
+      </section>
+
+      <hr class="separator" />
+
+      <section class="metrics-panel">
+        <h2>Results</h2>
+        <div class="metric-output">Chi-square (χ²): <span id="chi2" class="dynamic-value">–</span></div>
+        <div class="metric-output">Degrees of freedom: <span id="df" class="dynamic-value">–</span></div>
+        <div class="metric-output">p-value (upper tail): <span id="pValue" class="dynamic-value">–</span></div>
+        <div class="metric-output">Effect size (Cramér's V): <span id="cramerV" class="dynamic-value">–</span></div>
+        <div class="metric-output">Decision (α): <span id="decision" class="dynamic-value">–</span></div>
+        <div class="metric-output">Interpretation: <span id="interpretation">–</span></div>
+      </section>
+
+      <section>
+      <section>
+        <h2>Managerial Interpretation</h2>
+        <p id="managerInterpretation" class="plain-language"></p>
+        <h3>APA Style Report</h3>
+        <p id="apaReport" class="plain-language"></p>
+      </section>
+        <h2>Stacked 100% Bar Chart</h2>
+        <div id="chartCaption" class="plain-language"></div>
+        <div id="stackedChart" class="chart-container"></div>
+        <div id="chartLegend" class="chart-legend"></div>
+        <div id="chartTooltip" class="chart-tooltip" style="display:none;"></div>
+      </section>
+
+      <section>
+        <h2>Expected Counts</h2>
+        <div id="expectedContainer" class="mini-table"></div>
+        <details style="margin-top:8px">
+          <summary>What are expected counts?</summary>
+          <p class="plain-language">Expected counts represent what you would observe in each cell if the row and column variables were independent. Compute each as (Row total � Column total) / Grand total. The ?� test compares observed to expected; when many expected counts are small (e.g., < 5), interpret results with caution.</p>
+        </details>
+      </section>
+
+      <section id="questions">
+        <h2>Guiding Questions</h2>
+        <ol id="guidingList">
+          <li>What is your research question about the relationship between the two variables?</li>
+          <li>State H0 (independence) and H1 (association) clearly using your variable names.</li>
+          <li>Which categories contribute most to χ²? Look at proportions and expected counts.</li>
+          <li>Are the expected count assumptions met (generally ≥ 5 per cell)?</li>
+          <li>At your chosen α, what is your decision and what is the practical interpretation?</li>
+        </ol>
+      </section>
+    </main>
+  
+    <script src="app.js"></script>
+  </body>
+  </html>
+
