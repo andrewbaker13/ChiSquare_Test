@@ -1,1 +1,1 @@
-https://andrewbaker13.github.io/ChiSquare_Test/index.restored.html
+https://andrewbaker13.github.io/ChiSquare_Test/index.html
